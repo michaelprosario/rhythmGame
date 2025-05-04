@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rhythm Game Level Maker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .container {
+            width: 800px;
+            max-width: 100%;
+            margin: 20px auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+
+        .control-panel {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .file-upload {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #555;
+            height: 20px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-family: monospace;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .recording-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: red;
+            display: none;
+        }
+
+        .recording-indicator.active {
+            display: block;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 5px;
+            min-width: 120px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #3e8e41;
+        }
+
+        button:disabled {
+            background-color: #777;
+            cursor: not-allowed;
+        }
+
+        .export-panel {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 4px;
+            background-color: #555;
+            color: white;
+        }
+
+        .instructions {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .instructions kbd {
+            background-color: #555;
+            border-radius: 3px;
+            padding: 3px 5px;
+            font-family: monospace;
+        }
+
+        .event-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .event-list-item {
+            padding: 5px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .event-list-item:hover {
+            background-color: #444;
+        }
+
+        .waveform {
+            width: 100%;
+            height: 60px;
+            background-color: #333;
+            margin-top: 10px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Rhythm Game Level Maker</h1>
+
+        <div class="control-panel">
+            <div class="file-upload">
+                <label for="audio-file">Upload MP3 File:</label>
+                <input type="file" id="audio-file" accept="audio/mp3" />
+            </div>
+
+            <div class="waveform" id="waveform"></div>
+
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+
+            <div class="time-display">
+                <span id="current-time">0:00</span>
+                <span id="total-time">0:00</span>
+            </div>
+
+            <div class="button-group">
+                <button id="play-btn" disabled>Play</button>
+                <button id="pause-btn" disabled>Pause</button>
+                <button id="stop-btn" disabled>Stop</button>
+                <button id="record-btn" disabled>Start Recording</button>
+                <button id="clear-btn" disabled>Clear Recording</button>
+            </div>
+        </div>
+
+        <div id="game-container">
+            <div id="recording-indicator" class="recording-indicator"></div>
+        </div>
+
+        <div class="export-panel">
+            <label for="level-name">Level Name:</label>
+            <input type="text" id="level-name" placeholder="My Custom Level" />
+            <div class="button-group">
+                <button id="export-btn" disabled>Export Level</button>
+                <button id="import-btn">Import Level</button>
+                <input type="file" id="import-file" accept="application/json" style="display: none;" />
+                <button id="preview-btn" disabled>Preview Level</button>
+            </div>
+
+            <div class="event-list" id="event-list">
+                <div class="event-list-item">
+                    <span>No note events recorded yet.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Upload an MP3 file</li>
+                <li>Click "Start Recording" to begin</li>
+                <li>Press <kbd>D</kbd>, <kbd>F</kbd>, <kbd>J</kbd>, <kbd>K</kbd> keys to add notes in each lane</li>
+                <li>Click "Stop Recording" when done</li>
+                <li>You can clear and try again, or export your level as JSON</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // LevelMaker class - main controller for the level maker
+        class LevelMaker {
+            constructor() {
+                this.audioFile = null;
+                this.sound = null;
+                this.isPlaying = false;
+                this.isRecording = false;
+                this.startTime = 0;
+                this.noteEvents = [];
+                this.levelName = "My Custom Level";
+                this.lanes = 4;
+                this.laneWidth = 0;
+                this.hitZoneY = 0;
+                this.noteVisuals = [];
+                this.keyMap = { 'd': 0, 'f': 1, 'j': 2, 'k': 3 };
+
+                // Initialize the UI
+                this.initUI();
+            }
+
+            initUI() {
+                // Audio file selection
+                document.getElementById('audio-file').addEventListener('change', (e) => this.handleFileUpload(e));
+
+                // Control buttons
+                document.getElementById('play-btn').addEventListener('click', () => this.playAudio());
+                document.getElementById('pause-btn').addEventListener('click', () => this.pauseAudio());
+                document.getElementById('stop-btn').addEventListener('click', () => this.stopAudio());
+                document.getElementById('record-btn').addEventListener('click', () => this.toggleRecording());
+                document.getElementById('clear-btn').addEventListener('click', () => this.clearRecording());
+
+                // Export panel
+                document.getElementById('level-name').addEventListener('input', (e) => this.levelName = e.target.value);
+                document.getElementById('export-btn').addEventListener('click', () => this.exportLevel());
+                document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+                document.getElementById('import-file').addEventListener('change', (e) => this.importLevel(e));
+                document.getElementById('preview-btn').addEventListener('click', () => this.previewLevel());
+
+                // Keyboard events
+                document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+            }
+
+            // Handle file upload
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.audioFile = e.target.result;
+                    this.loadAudio();
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Load audio into p5.sound
+            loadAudio() {
+                if (!this.audioFile) return;
+
+                // Remove existing sound if there is one
+                if (this.sound) {
+                    this.sound.stop();
+                    this.sound = null;
+                }
+
+                // Load the new sound using p5's loadSound method
+                this.sound = p5.prototype.loadSound(this.audioFile, () => {
+                    console.log('Audio loaded successfully');
+                    this.enableControls();
+                    this.updateTotalTime();
+                    this.generateWaveform();
+                }, (error) => {
+                    console.error('Error loading audio:', error);
+                    alert('Error loading audio file. Please try again with a different file.');
+                });
+            }
+
+            // Enable UI controls once audio is loaded
+            enableControls() {
+                document.getElementById('play-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('record-btn').disabled = false;
+                document.getElementById('clear-btn').disabled = this.noteEvents.length === 0;
+                document.getElementById('export-btn').disabled = this.noteEvents.length === 0;
+                document.getElementById('preview-btn').disabled = this.noteEvents.length === 0;
+            }
+
+            // Update the total time display
+            updateTotalTime() {
+                if (!this.sound) return;
+
+                const totalSeconds = this.sound.duration();
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = Math.floor(totalSeconds % 60);
+
+                document.getElementById('total-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+
+            // Generate a simple waveform visualization
+            generateWaveform() {
+                // In a real implementation, we would use the Web Audio API to analyze the audio
+                // and generate a proper waveform. For this prototype, we'll create a placeholder.
+                const waveformDiv = document.getElementById('waveform');
+                waveformDiv.innerHTML = '';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = waveformDiv.offsetWidth;
+                canvas.height = waveformDiv.offsetHeight;
+                waveformDiv.appendChild(canvas);
+
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#4CAF50';
+
+                // Generate a fake waveform
+                for (let i = 0; i < canvas.width; i += 3) {
+                    const height = Math.random() * canvas.height * 0.6 + 5;
+                    ctx.fillRect(i, (canvas.height - height) / 2, 2, height);
+                }
+            }
+
+            // Play the audio
+            playAudio() {
+                if (!this.sound || this.isPlaying) return;
+
+                this.sound.play();
+                this.isPlaying = true;
+
+                document.getElementById('play-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = false;
+                document.getElementById('stop-btn').disabled = false;
+
+                // Start the progress update interval
+                this.updateProgress();
+            }
+
+            // Pause the audio
+            pauseAudio() {
+                if (!this.sound || !this.isPlaying) return;
+
+                this.sound.pause();
+                this.isPlaying = false;
+
+                document.getElementById('play-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = false;
+            }
+
+            // Stop the audio
+            stopAudio() {
+                if (!this.sound) return;
+
+                this.sound.stop();
+                this.isPlaying = false;
+
+                document.getElementById('play-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+
+                // Reset progress bar
+                document.getElementById('progress-bar').style.width = '0%';
+                document.getElementById('current-time').textContent = '0:00';
+            }
+
+            // Update progress bar and time display
+            updateProgress() {
+                if (!this.sound || !this.isPlaying) return;
+
+                const currentTime = this.sound.currentTime();
+                const duration = this.sound.duration();
+                const progress = (currentTime / duration) * 100;
+
+                document.getElementById('progress-bar').style.width = `${progress}%`;
+
+                const minutes = Math.floor(currentTime / 60);
+                const seconds = Math.floor(currentTime % 60);
+                document.getElementById('current-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+                // Schedule the next update
+                requestAnimationFrame(() => this.updateProgress());
+            }
+
+            // Toggle recording state
+            toggleRecording() {
+                if (this.isRecording) {
+                    this.stopRecording();
+                } else {
+                    this.startRecording();
+                }
+            }
+
+            // Start recording
+            startRecording() {
+                if (!this.sound) return;
+
+                // Reset and start audio
+                this.sound.stop();
+                this.sound.play();
+                this.isPlaying = true;
+
+                // Set recording state
+                this.isRecording = true;
+                this.startTime = Date.now();
+
+                // Update UI
+                document.getElementById('recording-indicator').classList.add('active');
+                document.getElementById('record-btn').textContent = 'Stop Recording';
+                document.getElementById('record-btn').style.backgroundColor = '#ff4444';
+
+                document.getElementById('play-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('export-btn').disabled = true;
+                document.getElementById('preview-btn').disabled = true;
+
+                // Start progress update
+                this.updateProgress();
+            }
+
+            // Stop recording
+            stopRecording() {
+                if (!this.isRecording) return;
+
+                // Stop audio
+                this.sound.stop();
+                this.isPlaying = false;
+
+                // Set recording state
+                this.isRecording = false;
+
+                // Update UI
+                document.getElementById('recording-indicator').classList.remove('active');
+                document.getElementById('record-btn').textContent = 'Start Recording';
+                document.getElementById('record-btn').style.backgroundColor = '#4CAF50';
+
+                document.getElementById('play-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('clear-btn').disabled = false;
+                document.getElementById('export-btn').disabled = this.noteEvents.length === 0;
+                document.getElementById('preview-btn').disabled = this.noteEvents.length === 0;
+
+                // Reset progress bar
+                document.getElementById('progress-bar').style.width = '0%';
+                document.getElementById('current-time').textContent = '0:00';
+
+                // Update the event list display
+                this.updateEventList();
+            }
+
+            // Clear all recorded notes
+            clearRecording() {
+                if (confirm('Are you sure you want to clear all recorded notes?')) {
+                    this.noteEvents = [];
+                    this.noteVisuals = [];
+                    this.updateEventList();
+
+                    document.getElementById('clear-btn').disabled = true;
+                    document.getElementById('export-btn').disabled = true;
+                    document.getElementById('preview-btn').disabled = true;
+                }
+            }
+
+            // Handle key press during recording
+            handleKeyPress(event) {
+                const key = event.key.toLowerCase();
+
+                // Only process valid lane keys
+                if (!this.isRecording || !this.keyMap.hasOwnProperty(key)) return;
+
+                const timeMs = Date.now() - this.startTime;
+                const lane = this.keyMap[key];
+
+                // Add note event
+                this.addNoteEvent(lane, timeMs);
+            }
+
+            // Add a note event
+            addNoteEvent(lane, timeMs) {
+                const noteEvent = {
+                    lane: lane,
+                    time: timeMs
+                };
+
+                this.noteEvents.push(noteEvent);
+
+                // Add visual representation for the note
+                const noteVisual = {
+                    lane: lane,
+                    y: 0,
+                    timeMs: timeMs
+                };
+                this.noteVisuals.push(noteVisual);
+
+                console.log(`Added note: Lane ${lane} at ${timeMs}ms`);
+            }
+
+            // Update the event list display
+            updateEventList() {
+                const eventList = document.getElementById('event-list');
+                eventList.innerHTML = '';
+
+                if (this.noteEvents.length === 0) {
+                    eventList.innerHTML = '<div class="event-list-item"><span>No note events recorded yet.</span></div>';
+                    return;
+                }
+
+                // Sort events by time
+                const sortedEvents = [...this.noteEvents].sort((a, b) => a.time - b.time);
+
+                sortedEvents.forEach((event, index) => {
+                    const lane = ['D', 'F', 'J', 'K'][event.lane];
+                    const time = this.formatTime(event.time);
+
+                    const eventItem = document.createElement('div');
+                    eventItem.className = 'event-list-item';
+                    eventItem.innerHTML = `
+            <span>${index + 1}. Lane ${lane}</span>
+            <span>${time}</span>
+            <span class="delete-event" data-index="${index}">❌</span>
+          `;
+                    eventList.appendChild(eventItem);
+
+                    // Add delete functionality
+                    const deleteBtn = eventItem.querySelector('.delete-event');
+                    deleteBtn.addEventListener('click', () => {
+                        this.deleteNoteEvent(index);
+                    });
+                });
+            }
+
+            // Delete a note event
+            deleteNoteEvent(index) {
+                this.noteEvents.splice(index, 1);
+                this.updateEventList();
+
+                document.getElementById('clear-btn').disabled = this.noteEvents.length === 0;
+                document.getElementById('export-btn').disabled = this.noteEvents.length === 0;
+                document.getElementById('preview-btn').disabled = this.noteEvents.length === 0;
+            }
+
+            // Format time in milliseconds to mm:ss.SSS
+            formatTime(ms) {
+                const totalSeconds = ms / 1000;
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = Math.floor(totalSeconds % 60);
+                const milliseconds = Math.floor((totalSeconds - Math.floor(totalSeconds)) * 1000);
+
+                return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+            }
+
+            // Export level as JSON
+            exportLevel() {
+                if (this.noteEvents.length === 0) {
+                    alert('No note events to export.');
+                    return;
+                }
+
+                const levelData = {
+                    name: this.levelName || 'Untitled Level',
+                    createdAt: new Date().toISOString(),
+                    noteEvents: this.noteEvents.sort((a, b) => a.time - b.time)
+                };
+
+                const json = JSON.stringify(levelData, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${this.levelName.replace(/\s+/g, '_')}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // Import level from JSON
+            importLevel(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const levelData = JSON.parse(e.target.result);
+
+                        if (!levelData.noteEvents || !Array.isArray(levelData.noteEvents)) {
+                            throw new Error('Invalid level data format');
+                        }
+
+                        this.levelName = levelData.name || 'Imported Level';
+                        document.getElementById('level-name').value = this.levelName;
+
+                        this.noteEvents = levelData.noteEvents;
+                        this.updateEventList();
+
+                        document.getElementById('clear-btn').disabled = false;
+                        document.getElementById('export-btn').disabled = false;
+                        document.getElementById('preview-btn').disabled = false;
+
+                        alert('Level imported successfully!');
+                    } catch (error) {
+                        console.error('Error importing level:', error);
+                        alert('Error importing level. Please check the file format.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            // Preview the level
+            previewLevel() {
+                alert('Preview functionality would play the level as it would appear in the game.');
+                // In a real implementation, this would render the notes and play the music
+            }
+
+            // p5.js setup function
+            setup(p) {
+                p.createCanvas(800, 600).parent('game-container');
+                this.laneWidth = p.width / this.lanes;
+                this.hitZoneY = p.height - 100;
+            }
+
+            // p5.js draw function
+            draw(p) {
+                p.background(40);
+
+                // Draw lanes
+                for (let i = 0; i < this.lanes; i++) {
+                    p.fill(i % 2 === 0 ? 60 : 50);
+                    p.rect(i * this.laneWidth, 0, this.laneWidth, p.height);
+                }
+
+                // Draw hit zone
+                p.stroke(255);
+                p.strokeWeight(3);
+                p.line(0, this.hitZoneY, p.width, this.hitZoneY);
+                p.noStroke();
+
+                // Draw key indicators
+                p.fill(200);
+                p.textAlign(p.CENTER, p.CENTER);
+                p.textSize(24);
+                const keyLabels = ['D', 'F', 'J', 'K'];
+                for (let i = 0; i < this.lanes; i++) {
+                    p.text(keyLabels[i], i * this.laneWidth + this.laneWidth / 2, p.height - 50);
+                }
+
+                // Draw recorded notes (when previewing)
+                if (this.isPlaying && !this.isRecording && this.sound) {
+                    const currentTime = this.sound.currentTime() * 1000;
+
+                    for (const note of this.noteEvents) {
+                        const timeDiff = note.time - currentTime;
+                        if (timeDiff > -500 && timeDiff < 2000) {
+                            const y = this.hitZoneY - timeDiff * 0.2;
+                            if (y >= 0 && y <= p.height) {
+                                p.fill(100, 200, 255);
+                                p.ellipse(
+                                    note.lane * this.laneWidth + this.laneWidth / 2,
+                                    y,
+                                    40,
+                                    40
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Draw notes for recording visual feedback
+                if (this.isRecording) {
+                    for (let i = this.noteVisuals.length - 1; i >= 0; i--) {
+                        const visual = this.noteVisuals[i];
+                        const currentTime = Date.now() - this.startTime;
+                        const timeDiff = currentTime - visual.timeMs;
+
+                        visual.y = this.hitZoneY + timeDiff * 0.2;
+
+                        if (visual.y < p.height) {
+                            p.fill(255, 100, 100);
+                            p.ellipse(
+                                visual.lane * this.laneWidth + this.laneWidth / 2,
+                                visual.y,
+                                40,
+                                40
+                            );
+                        } else {
+                            this.noteVisuals.splice(i, 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // p5.js instance
+        let levelMaker;
+
+        new p5(function (p) {
+            p.setup = function () {
+                levelMaker = new LevelMaker();
+                levelMaker.setup(p);
+            };
+
+            p.draw = function () {
+                levelMaker.draw(p);
+            };
+        });
+    </script>
+</body>
+
+</html>
