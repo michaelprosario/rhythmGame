@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rhythm Game - OOP Version</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -82,9 +83,11 @@
 
     <script>
         var noteSprite;
+        var gameMusic;
         function preload() {
             // Load your note image or sprite sheet
             noteSprite = loadImage('note.png'); // Replace with your image path  
+            gameMusic = loadSound('musicMaker2.mp3');
         }
 
 
@@ -453,6 +456,7 @@
                 this.hitZoneY = 0;
                 this.laneWidth = 0;
                 this.lastNoteTime = 0;
+                this.music = gameMusic;
 
                 this.scoreManager = new ScoreManager();
                 this.uiManager = new UIManager();
@@ -471,6 +475,11 @@
 
                 this.uiManager.setupControls(this);
                 this.setDifficulty(Difficulty.EASY);
+
+                // Play the music
+                if (this.music && !this.music.isPlaying()) {
+                    this.music.play();
+                }                
             }
 
             update() {
@@ -560,6 +569,12 @@
 
                 this.uiManager.updateScore(0);
                 this.uiManager.updateCombo(0);
+
+                // Restart the music
+                if (this.music) {
+                    this.music.stop();
+                    this.music.play();
+                }                
             }
         }
 
