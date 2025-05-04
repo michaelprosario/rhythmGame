@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rhythm Game Prototype</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #222;
+      font-family: Arial, sans-serif;
+    }
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 600px;
+    }
+    .ui-overlay {
+      position: absolute;
+      color: white;
+      padding: 10px;
+      z-index: 10;
+    }
+    #score-display {
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+    }
+    #combo-display {
+      top: 50px;
+      left: 10px;
+      font-size: 18px;
+    }
+    #feedback-display {
+      top: 10px;
+      right: 10px;
+      font-size: 18px;
+    }
+    #difficulty-controls {
+      bottom: 10px;
+      left: 10px;
+    }
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 15px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .active {
+      background-color: #2E7D32;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="score-display" class="ui-overlay">Score: 0</div>
+    <div id="combo-display" class="ui-overlay">Combo: 0</div>
+    <div id="feedback-display" class="ui-overlay"></div>
+    <div id="difficulty-controls" class="ui-overlay">
+      <button id="easy-btn" class="active">Easy</button>
+      <button id="medium-btn">Medium</button>
+      <button id="hard-btn">Hard</button>
+      <button id="restart-btn">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    // Game variables
+    let score = 0;
+    let combo = 0;
+    let notes = [];
+    let lanes = 4; // Number of lanes
+    let hitZoneY;
+    let laneWidth;
+    let noteSpeed = 3; // Base speed of notes
+    let noteFrequency = 1500; // Time between note spawns in milliseconds
+    let lastNoteTime = 0;
+    let hitSounds = [];
+    let missSounds = [];
+    let bgMusic;
+    let difficulty = 'easy';
+    let gameActive = true;
+    let hitFeedback = [];
+
+    // Difficulty settings
+    const difficulties = {
+      easy: { speed: 3, frequency: 1500 },
+      medium: { speed: 4, frequency: 1000 },
+      hard: { speed: 5, frequency: 700 }
+    };
+
+    // Set up difficulty buttons
+    document.getElementById('easy-btn').addEventListener('click', () => setDifficulty('easy'));
+    document.getElementById('medium-btn').addEventListener('click', () => setDifficulty('medium'));
+    document.getElementById('hard-btn').addEventListener('click', () => setDifficulty('hard'));
+    document.getElementById('restart-btn').addEventListener('click', restartGame);
+
+    function setDifficulty(level) {
+      difficulty = level;
+      noteSpeed = difficulties[level].speed;
+      noteFrequency = difficulties[level].frequency;
+      
+      // Update button UI
+      document.querySelectorAll('#difficulty-controls button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.getElementById(`${level}-btn`).classList.add('active');
+    }
+
+    function restartGame() {
+      score = 0;
+      combo = 0;
+      notes = [];
+      hitFeedback = [];
+      lastNoteTime = 0;
+      updateUI();
+      gameActive = true;
+    }
+
+    function updateUI() {
+      document.getElementById('score-display').innerText = `Score: ${score}`;
+      document.getElementById('combo-display').innerText = `Combo: ${combo}`;
+    }
+
+    function showFeedback(text, lane) {
+      document.getElementById('feedback-display').innerText = text;
+      hitFeedback.push({
+        text: text,
+        x: lane * laneWidth + laneWidth / 2,
+        y: hitZoneY,
+        life: 30,
+        opacity: 255
+      });
+    }
+
+    function setup() {
+      const canvas = createCanvas(800, 600);
+      canvas.parent('game-container');
+      
+      laneWidth = width / lanes;
+      hitZoneY = height - 100;
+      
+      // Create sound objects for hit and miss feedback
+      for (let i = 0; i < 3; i++) {
+        hitSounds[i] = new p5.Oscillator('sine');
+        hitSounds[i].freq(440 + i * 100);
+        hitSounds[i].amp(0);
+        hitSounds[i].start();
+        
+        missSounds[i] = new p5.Oscillator('triangle');
+        missSounds[i].freq(220 + i * 50);
+        missSounds[i].amp(0);
+        missSounds[i].start();
+      }
+    }
+
+    function draw() {
+      background(40);
+      
+      // Draw lanes
+      for (let i = 0; i < lanes; i++) {
+        if (i % 2 === 0) {
+          fill(60);
+        } else {
+          fill(50);
+        }
+        rect(i * laneWidth, 0, laneWidth, height);
+      }
+      
+      // Draw hit zone
+      stroke(255);
+      strokeWeight(3);
+      line(0, hitZoneY, width, hitZoneY);
+      noStroke();
+      
+      // Spawn new notes randomly
+      if (gameActive && millis() - lastNoteTime > noteFrequency) {
+        spawnNote();
+        lastNoteTime = millis();
+      }
+      
+      // Update and draw notes
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const note = notes[i];
+        note.y += noteSpeed;
+        
+        // Draw note
+        if (note.active) {
+          fill(note.color);
+          ellipse(note.x, note.y, 40, 40);
+        }
+        
+        // Check for misses
+        if (note.y > hitZoneY + 50 && note.active) {
+          note.active = false;
+          combo = 0;
+          updateUI();
+          showFeedback("Miss!", note.lane);
+          playMissSound();
+        }
+        
+        // Remove notes that are offscreen
+        if (note.y > height) {
+          notes.splice(i, 1);
+        }
+      }
+      
+      // Draw hit feedback
+      for (let i = hitFeedback.length - 1; i >= 0; i--) {
+        const feedback = hitFeedback[i];
+        fill(255, 255, 255, feedback.opacity);
+        textAlign(CENTER, CENTER);
+        textSize(24);
+        text(feedback.text, feedback.x, feedback.y);
+        
+        feedback.y -= 2;
+        feedback.opacity -= 8;
+        feedback.life--;
+        
+        if (feedback.life <= 0) {
+          hitFeedback.splice(i, 1);
+        }
+      }
+      
+      // Draw key indicators
+      fill(200);
+      textAlign(CENTER, CENTER);
+      textSize(24);
+      for (let i = 0; i < lanes; i++) {
+        text(getLaneKey(i), i * laneWidth + laneWidth / 2, height - 50);
+      }
+    }
+
+    function getLaneKey(lane) {
+      const keys = ['D', 'F', 'J', 'K'];
+      return keys[lane];
+    }
+
+    function spawnNote() {
+      const lane = floor(random(lanes));
+      const note = {
+        x: lane * laneWidth + laneWidth / 2,
+        y: 0,
+        lane: lane,
+        active: true,
+        color: color(random(100, 255), random(100, 255), random(100, 255))
+      };
+      notes.push(note);
+    }
+
+    function keyPressed() {
+      let lanePressed = -1;
+      
+      if (key === 'd' || key === 'D') lanePressed = 0;
+      else if (key === 'f' || key === 'F') lanePressed = 1;
+      else if (key === 'j' || key === 'J') lanePressed = 2;
+      else if (key === 'k' || key === 'K') lanePressed = 3;
+      
+      if (lanePressed >= 0) {
+        checkHit(lanePressed);
+      }
+    }
+
+    function checkHit(lane) {
+      let hit = false;
+      let hitIndex = -1;
+      let hitAccuracy = 100; // Lower is better
+      
+      // Find the closest note in the hit zone
+      for (let i = 0; i < notes.length; i++) {
+        const note = notes[i];
+        if (note.lane === lane && note.active) {
+          const distance = abs(note.y - hitZoneY);
+          if (distance < 50 && distance < hitAccuracy) { // Within hit range
+            hitAccuracy = distance;
+            hit = true;
+            hitIndex = i;
+          }
+        }
+      }
+      
+      if (hit) {
+        const note = notes[hitIndex];
+        note.active = false;
+        
+        // Calculate score based on accuracy
+        let points;
+        let feedbackText;
+        
+        if (hitAccuracy < 10) {
+          points = 100;
+          feedbackText = "Perfect!";
+        } else if (hitAccuracy < 20) {
+          points = 75;
+          feedbackText = "Great!";
+        } else if (hitAccuracy < 35) {
+          points = 50;
+          feedbackText = "Good!";
+        } else {
+          points = 25;
+          feedbackText = "OK";
+        }
+        
+        // Apply combo bonus
+        combo++;
+        const comboMultiplier = 1 + min(combo * 0.1, 2); // Cap at 3x
+        points = floor(points * comboMultiplier);
+        
+        score += points;
+        updateUI();
+        showFeedback(`${feedbackText} +${points}`, lane);
+        playHitSound(lane);
+      } else {
+        // No hit, no penalty but reset combo
+        combo = 0;
+        updateUI();
+        showFeedback("Miss!", lane);
+        playMissSound();
+      }
+    }
+
+    function playHitSound(lane) {
+      const sound = hitSounds[lane % hitSounds.length];
+      sound.amp(0.2, 0);
+      sound.amp(0, 0.1);
+    }
+
+    function playMissSound() {
+      const sound = missSounds[floor(random(missSounds.length))];
+      sound.amp(0.1, 0);
+      sound.amp(0, 0.1);
+    }
+  </script>
+</body>
+</html>

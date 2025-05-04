@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rhythm Game - OOP Version</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            color: white;
+            padding: 10px;
+            z-index: 10;
+        }
+
+        #score-display {
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+        }
+
+        #combo-display {
+            top: 50px;
+            left: 10px;
+            font-size: 18px;
+        }
+
+        #difficulty-controls {
+            bottom: 10px;
+            left: 10px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .active {
+            background-color: #2E7D32;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="score-display" class="ui-overlay">Score: 0</div>
+        <div id="combo-display" class="ui-overlay">Combo: 0</div>
+        <div id="difficulty-controls" class="ui-overlay">
+            <button id="easy-btn" class="active">Easy</button>
+            <button id="medium-btn">Medium</button>
+            <button id="hard-btn">Hard</button>
+            <button id="restart-btn">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        var noteSprite;
+        function preload() {
+            // Load your note image or sprite sheet
+            noteSprite = loadImage('note.png'); // Replace with your image path  
+        }
+
+
+        // Difficulty enumeration
+        class Difficulty {
+            static get EASY() { return 'easy'; }
+            static get MEDIUM() { return 'medium'; }
+            static get HARD() { return 'hard'; }
+
+            static getSpeed(difficulty) {
+                const speeds = {
+                    [Difficulty.EASY]: 3,
+                    [Difficulty.MEDIUM]: 4,
+                    [Difficulty.HARD]: 5
+                };
+                return speeds[difficulty] || speeds[Difficulty.EASY];
+            }
+
+            static getFrequency(difficulty) {
+                const frequencies = {
+                    [Difficulty.EASY]: 1500,
+                    [Difficulty.MEDIUM]: 1000,
+                    [Difficulty.HARD]: 700
+                };
+                return frequencies[difficulty] || frequencies[Difficulty.EASY];
+            }
+        }
+
+        // Hit result enumeration
+        class HitResult {
+            static get PERFECT() { return 'perfect'; }
+            static get GREAT() { return 'great'; }
+            static get GOOD() { return 'good'; }
+            static get OK() { return 'ok'; }
+            static get MISS() { return 'miss'; }
+
+            static getScoreValue(result) {
+                const scores = {
+                    [HitResult.PERFECT]: 100,
+                    [HitResult.GREAT]: 75,
+                    [HitResult.GOOD]: 50,
+                    [HitResult.OK]: 25,
+                    [HitResult.MISS]: 0
+                };
+                return scores[result] || 0;
+            }
+
+            static getFeedbackText(result) {
+                const feedback = {
+                    [HitResult.PERFECT]: "Perfect!",
+                    [HitResult.GREAT]: "Great!",
+                    [HitResult.GOOD]: "Good!",
+                    [HitResult.OK]: "OK",
+                    [HitResult.MISS]: "Miss!"
+                };
+                return feedback[result] || "";
+            }
+        }
+
+        // Note class
+        class Note {
+            constructor(lane, laneWidth) {
+                this.lane = lane;
+                this.x = lane * laneWidth + laneWidth / 2;
+                this.y = 0;
+                this.active = true;
+                this.color = color(random(100, 255), random(100, 255), random(100, 255));
+                this.size = 3
+                this.radius = this.size * 10;
+            }
+
+            update(speed) {
+                this.y += speed;
+            }
+
+            draw() {
+                if (this.active) {
+
+                    image(noteSprite,
+
+                        this.x - this.radius-20,
+                        this.y - this.radius,
+
+                        this.radius * this.size,
+                        this.radius * this.size
+                    );
+
+                }
+            }
+
+            isInHitZone(hitZoneY) {
+                return Math.abs(this.y - hitZoneY) < 50;
+            }
+
+            getHitAccuracy(hitZoneY) {
+                return Math.abs(this.y - hitZoneY);
+            }
+
+            deactivate() {
+                this.active = false;
+            }
+
+            isOffscreen(height) {
+                return this.y > height;
+            }
+        }
+
+        // FeedbackEffect class
+        class FeedbackEffect {
+            constructor(text, x, y) {
+                this.text = text;
+                this.x = x;
+                this.y = y;
+                this.life = 30;
+                this.opacity = 255;
+            }
+
+            update() {
+                this.y -= 2;
+                this.opacity -= 8;
+                this.life--;
+            }
+
+            draw() {
+                fill(255, 255, 255, this.opacity);
+                textAlign(CENTER, CENTER);
+                textSize(24);
+                text(this.text, this.x, this.y);
+            }
+
+            isAlive() {
+                return this.life > 0;
+            }
+        }
+
+        // Lane class
+        class Lane {
+            constructor(index, width, keyBinding, hitZoneY) {
+                this.index = index;
+                this.width = width;
+                this.keyBinding = keyBinding;
+                this.hitZoneY = hitZoneY;
+                this.notes = [];
+            }
+
+            draw(isEvenLane) {
+                // Draw lane background
+                fill(isEvenLane ? 60 : 50);
+                rect(this.index * this.width, 0, this.width, height);
+
+                // Draw key indicator
+                fill(200);
+                textAlign(CENTER, CENTER);
+                textSize(24);
+                text(this.keyBinding.toUpperCase(), this.index * this.width + this.width / 2, height - 50);
+
+                // Draw notes
+                for (const note of this.notes) {
+                    note.draw();
+                }
+            }
+
+            spawnNote() {
+                this.notes.push(new Note(this.index, this.width));
+            }
+
+            update(speed) {
+                for (let i = this.notes.length - 1; i >= 0; i--) {
+                    const note = this.notes[i];
+                    note.update(speed);
+
+                    // Remove offscreen notes
+                    if (note.isOffscreen(height)) {
+                        this.notes.splice(i, 1);
+                    }
+                }
+            }
+
+            checkHit() {
+                let bestNote = null;
+                let bestAccuracy = 100;
+
+                for (const note of this.notes) {
+                    if (!note.active) continue;
+
+                    if (note.isInHitZone(this.hitZoneY)) {
+                        const accuracy = note.getHitAccuracy(this.hitZoneY);
+                        if (accuracy < bestAccuracy) {
+                            bestAccuracy = accuracy;
+                            bestNote = note;
+                        }
+                    }
+                }
+
+                if (bestNote) {
+                    bestNote.deactivate();
+
+                    // Determine hit result based on accuracy
+                    let result;
+                    if (bestAccuracy < 10) {
+                        result = HitResult.PERFECT;
+                    } else if (bestAccuracy < 20) {
+                        result = HitResult.GREAT;
+                    } else if (bestAccuracy < 35) {
+                        result = HitResult.GOOD;
+                    } else {
+                        result = HitResult.OK;
+                    }
+
+                    return {
+                        result: result,
+                        note: bestNote,
+                        accuracy: bestAccuracy
+                    };
+                }
+
+                return {
+                    result: HitResult.MISS,
+                    note: null,
+                    accuracy: 100
+                };
+            }
+
+            checkMisses() {
+                const missedNotes = [];
+
+                for (const note of this.notes) {
+                    if (note.active && note.y > this.hitZoneY + 50) {
+                        note.deactivate();
+                        missedNotes.push(note);
+                    }
+                }
+
+                return missedNotes;
+            }
+        }
+
+        // ScoreManager class
+        class ScoreManager {
+            constructor() {
+                this.currentScore = 0;
+                this.currentCombo = 0;
+                this.maxCombo = 0;
+                this.hitCounts = {
+                    [HitResult.PERFECT]: 0,
+                    [HitResult.GREAT]: 0,
+                    [HitResult.GOOD]: 0,
+                    [HitResult.OK]: 0,
+                    [HitResult.MISS]: 0
+                };
+            }
+
+            calculateScore(hitResult) {
+                const baseScore = HitResult.getScoreValue(hitResult);
+                const comboMultiplier = this.getComboMultiplier();
+
+                this.hitCounts[hitResult]++;
+
+                if (hitResult === HitResult.MISS) {
+                    this.resetCombo();
+                    return 0;
+                } else {
+                    this.incrementCombo();
+                    const points = Math.floor(baseScore * comboMultiplier);
+                    this.currentScore += points;
+                    return points;
+                }
+            }
+
+            incrementCombo() {
+                this.currentCombo++;
+                if (this.currentCombo > this.maxCombo) {
+                    this.maxCombo = this.currentCombo;
+                }
+            }
+
+            resetCombo() {
+                this.currentCombo = 0;
+            }
+
+            getComboMultiplier() {
+                // Cap at 3x
+                return 1 + Math.min(this.currentCombo * 0.1, 2);
+            }
+
+            getTotalScore() {
+                return this.currentScore;
+            }
+
+            getCombo() {
+                return this.currentCombo;
+            }
+
+            reset() {
+                this.currentScore = 0;
+                this.currentCombo = 0;
+                this.maxCombo = 0;
+                for (const result in this.hitCounts) {
+                    this.hitCounts[result] = 0;
+                }
+            }
+        }
+
+        // UIManager class
+        class UIManager {
+            constructor() {
+                this.scoreDisplay = document.getElementById('score-display');
+                this.comboDisplay = document.getElementById('combo-display');
+                this.feedbackEffects = [];
+            }
+
+            updateScore(score) {
+                this.scoreDisplay.innerText = `Score: ${score}`;
+            }
+
+            updateCombo(combo) {
+                this.comboDisplay.innerText = `Combo: ${combo}`;
+            }
+
+            showFeedback(text, points, x, y) {
+                let displayText = text;
+                if (points > 0) {
+                    displayText = `${text} +${points}`;
+                }
+                this.feedbackEffects.push(new FeedbackEffect(displayText, x, y));
+            }
+
+            update() {
+                for (let i = this.feedbackEffects.length - 1; i >= 0; i--) {
+                    const effect = this.feedbackEffects[i];
+                    effect.update();
+
+                    if (!effect.isAlive()) {
+                        this.feedbackEffects.splice(i, 1);
+                    }
+                }
+            }
+
+            draw() {
+                for (const effect of this.feedbackEffects) {
+                    effect.draw();
+                }
+            }
+
+            setupControls(game) {
+                document.getElementById('easy-btn').addEventListener('click', () => game.setDifficulty(Difficulty.EASY));
+                document.getElementById('medium-btn').addEventListener('click', () => game.setDifficulty(Difficulty.MEDIUM));
+                document.getElementById('hard-btn').addEventListener('click', () => game.setDifficulty(Difficulty.HARD));
+                document.getElementById('restart-btn').addEventListener('click', () => game.restart());
+            }
+
+            updateDifficultyUI(difficulty) {
+                document.querySelectorAll('#difficulty-controls button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.getElementById(`${difficulty}-btn`).classList.add('active');
+            }
+        }
+
+        // Main Game class
+        class Game {
+            constructor() {
+                this.lanes = 4;
+                this.difficulty = Difficulty.EASY;
+                this.gameActive = true;
+                this.hitZoneY = 0;
+                this.laneWidth = 0;
+                this.lastNoteTime = 0;
+
+                this.scoreManager = new ScoreManager();
+                this.uiManager = new UIManager();
+                this.laneObjects = [];
+            }
+
+            initialize() {
+                this.laneWidth = width / this.lanes;
+                this.hitZoneY = height - 100;
+
+                // Create lanes with key bindings
+                const keyBindings = ['d', 'f', 'j', 'k'];
+                for (let i = 0; i < this.lanes; i++) {
+                    this.laneObjects.push(new Lane(i, this.laneWidth, keyBindings[i], this.hitZoneY));
+                }
+
+                this.uiManager.setupControls(this);
+                this.setDifficulty(Difficulty.EASY);
+            }
+
+            update() {
+                if (!this.gameActive) return;
+
+                const currentTime = millis();
+                const noteSpeed = Difficulty.getSpeed(this.difficulty);
+                const noteFrequency = Difficulty.getFrequency(this.difficulty);
+
+                // Spawn new notes randomly
+                if (currentTime - this.lastNoteTime > noteFrequency) {
+                    const randomLane = floor(random(this.lanes));
+                    this.laneObjects[randomLane].spawnNote();
+                    this.lastNoteTime = currentTime;
+                }
+
+                // Update lanes and notes
+                for (const lane of this.laneObjects) {
+                    lane.update(noteSpeed);
+
+                    // Check for misses
+                    const missedNotes = lane.checkMisses();
+                    for (const missedNote of missedNotes) {
+                        this.scoreManager.calculateScore(HitResult.MISS);
+                        this.uiManager.showFeedback(HitResult.getFeedbackText(HitResult.MISS), 0, missedNote.x, this.hitZoneY);
+                    }
+                }
+
+                // Update UI effects
+                this.uiManager.update();
+                this.uiManager.updateScore(this.scoreManager.getTotalScore());
+                this.uiManager.updateCombo(this.scoreManager.getCombo());
+            }
+
+            draw() {
+                background(40);
+
+                // Draw lanes
+                for (let i = 0; i < this.lanes; i++) {
+                    this.laneObjects[i].draw(i % 2 === 0);
+                }
+
+                // Draw hit zone line
+                stroke(255);
+                strokeWeight(3);
+                line(0, this.hitZoneY, width, this.hitZoneY);
+                noStroke();
+
+                // Draw UI effects
+                this.uiManager.draw();
+            }
+
+            handleInput(key) {
+                if (!this.gameActive) return;
+
+                const keyBindings = ['d', 'f', 'j', 'k'];
+                const laneIndex = keyBindings.indexOf(key.toLowerCase());
+
+                if (laneIndex >= 0) {
+                    const lane = this.laneObjects[laneIndex];
+                    const hitResult = lane.checkHit();
+
+                    const points = this.scoreManager.calculateScore(hitResult.result);
+                    this.uiManager.showFeedback(
+                        HitResult.getFeedbackText(hitResult.result),
+                        points,
+                        lane.index * lane.width + lane.width / 2,
+                        this.hitZoneY
+                    );
+                }
+            }
+
+            setDifficulty(level) {
+                this.difficulty = level;
+                this.uiManager.updateDifficultyUI(level);
+            }
+
+            restart() {
+                this.gameActive = true;
+                this.lastNoteTime = millis();
+                this.scoreManager.reset();
+
+                // Clear all notes
+                for (const lane of this.laneObjects) {
+                    lane.notes = [];
+                }
+
+                this.uiManager.updateScore(0);
+                this.uiManager.updateCombo(0);
+            }
+        }
+
+        // p5.js hooks
+        let game;
+
+        function setup() {
+            const canvas = createCanvas(800, 600);
+            canvas.parent('game-container');
+
+            game = new Game();
+            game.initialize();
+        }
+
+        function draw() {
+            game.update();
+            game.draw();
+        }
+
+        function keyPressed() {
+            game.handleInput(key);
+        }
+    </script>
+</body>
+
+</html>
