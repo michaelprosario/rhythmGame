@@ -84,10 +84,14 @@
     <script>
         var noteSprite;
         var gameMusic;
+        var levelData;
         function preload() {
             // Load your note image or sprite sheet
             noteSprite = loadImage('note.png'); // Replace with your image path  
             gameMusic = loadSound('musicMaker2.mp3');
+            loadJSON('My_Custom_Level.json', function(data) {
+                levelData = data;
+            });
         }
 
 
@@ -455,8 +459,12 @@
                 this.gameActive = true;
                 this.hitZoneY = 0;
                 this.laneWidth = 0;
-                this.lastNoteTime = 0;
                 this.music = gameMusic;
+                
+                // Timing variables
+                this.gameStartTime = 0;
+                this.currentGameTime = 0;
+                this.noteEventIndex = 0;
 
                 this.scoreManager = new ScoreManager();
                 this.uiManager = new UIManager();
@@ -475,6 +483,10 @@
 
                 this.uiManager.setupControls(this);
                 this.setDifficulty(Difficulty.EASY);
+                
+                // Initialize game timing
+                this.gameStartTime = millis();
+                this.noteEventIndex = 0;
 
                 // Play the music
                 if (this.music && !this.music.isPlaying()) {
@@ -483,17 +495,37 @@
             }
 
             update() {
-                if (!this.gameActive) return;
+                if (!this.gameActive || !levelData) return;
 
-                const currentTime = millis();
                 const noteSpeed = Difficulty.getSpeed(this.difficulty);
-                const noteFrequency = Difficulty.getFrequency(this.difficulty);
-
-                // Spawn new notes randomly
-                if (currentTime - this.lastNoteTime > noteFrequency) {
-                    const randomLane = floor(random(this.lanes));
-                    this.laneObjects[randomLane].spawnNote();
-                    this.lastNoteTime = currentTime;
+                
+                // Update game time
+                this.currentGameTime = millis() - this.gameStartTime;
+                
+                // Spawn notes from level data
+                if (levelData.noteEvents && this.noteEventIndex < levelData.noteEvents.length) {
+                    // Check upcoming notes that should be spawned
+                    while (this.noteEventIndex < levelData.noteEvents.length) {
+                        const noteEvent = levelData.noteEvents[this.noteEventIndex];
+                        
+                        // Calculate when to spawn the note so it reaches the hit zone at the right time
+                        // The spawn time depends on the note speed and distance to travel
+                        const noteDistanceToTravel = this.hitZoneY;
+                        const timeToReachHitZone = noteDistanceToTravel / noteSpeed;
+                        const spawnTime = noteEvent.time - (timeToReachHitZone * (1000/60)); // Convert frames to ms
+                        
+                        // If it's time to spawn this note
+                        if (this.currentGameTime >= spawnTime) {
+                            const lane = noteEvent.lane;
+                            if (lane >= 0 && lane < this.lanes) {
+                                this.laneObjects[lane].spawnNote();
+                            }
+                            this.noteEventIndex++;
+                        } else {
+                            // If this note shouldn't be spawned yet, break the loop
+                            break;
+                        }
+                    }
                 }
 
                 // Update lanes and notes
@@ -530,6 +562,12 @@
 
                 // Draw UI effects
                 this.uiManager.draw();
+                
+                // Debug: show current game time (can be removed in final version)
+                fill(255);
+                textAlign(RIGHT, TOP);
+                textSize(16);
+                text(`Time: ${Math.floor(this.currentGameTime)}ms`, width - 10, 10);
             }
 
             handleInput(key) {
@@ -559,8 +597,12 @@
 
             restart() {
                 this.gameActive = true;
-                this.lastNoteTime = millis();
                 this.scoreManager.reset();
+
+                // Reset game timing
+                this.gameStartTime = millis();
+                this.currentGameTime = 0;
+                this.noteEventIndex = 0;
 
                 // Clear all notes
                 for (const lane of this.laneObjects) {
